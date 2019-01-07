@@ -73,3 +73,94 @@ Hystix的超时时间默认也是1000ms
           isolation:
             thread:
               timeoutInMillisecond: 6000 # 设置hystrix的超时时间为6000ms
+
+
+# hystrix小demo #
+## 1、启动服务注册中心 ##
+启动服务注册中心spring-cloud-discovery-eureka
+## 2、修改服务提供者 ##
+创建服务提供者spring-cloud-provider
+
+a、在Controller中增加一个方法sayHello，代码如下：
+
+
+    @GetMapping("/sayHello")
+   	public String sayHello() {
+		return "Hello this is provider";
+	}
+
+b、运行maven命令install，将项目jar包放到maven库中，并运行两个服务提供者，方法如下：
+
+使用命令行窗口进入jar包所在的路径 执行命令：
+
+
+    java -jar spring-cloud-provider-0.0.1-SNAPSHOT.jar --server.port=8081
+
+再启动一个命令行窗口进入jar包所在的路径执行命令：
+
+    java -jar spring-cloud-provider-0.0.1-SNAPSHOT.jar --server.port=8082
+
+这样就启动了两个服务提供者，端口号分别问8081和8082。 
+3、修改服务消费者
+创建服务消费者spring-cloud-consumer，参照：Spring Cloud 服务消费者
+
+a、在POM文件中加入依赖spring-cloud-starter-hystrix
+
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-hystrix</artifactId>
+</dependency>
+
+b、在spring boot 启动文件增加注解@EnableCircuitBreaker，开启熔断器功能
+
+
+    @EnableCircuitBreaker
+	@SpringBootApplication
+	@EnableDiscoveryClient
+	public class SpringCloudConsumerApplication {
+
+    /**
+     * 实例化RestTemplate，通过@LoadBalanced注解开启均衡负载能力.
+     * @return restTemplate
+     */
+    @Bean
+    @LoadBalanced
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpringCloudConsumerApplication.class, args);
+    }
+	}
+
+c、在ConsumerService中增加sayHello方法和回掉方法sayHelloFallBack，使用注解@HystrixCommand(fallbackMethod = “sayHelloFallBack”)指定回调函数，回调函数的返回值和参数必须和正式方法相同，不然会报错
+
+	@HystrixCommand(fallbackMethod = "sayHelloFallBack")
+	public String sayHello() {
+	return this.restTemplate.getForObject("http://spring-cloud-provider/sayHello", String.class);
+	}
+
+	public String sayHelloFallBack() {
+	return "error";
+	}
+
+d、在ConsumerController中增加方法调用ConsumerService中的sayHello方法
+	
+	@RestController 
+	public class ConsumerController {
+	
+	@Autowired
+	private ConsumerService consumerService;
+	
+	@GetMapping("/sayHello")
+	public String sayHello() {
+	return consumerService.sayHello();
+	}
+
+e、启动该工程，服务注册中心显示该服务信息
+ 
+## 4、测试 ##
+访问服务消费者的方法：http://localhost:8010/sayHello，返回：Hello this is provider信息。 
+关闭服务提供者8082，再访问该路径，返回error信息。 
+这说明Hystrix 已经生效了。
